@@ -72,7 +72,7 @@ train_size = len(dataset) - val_size
 train_ds, val_ds = random_split(dataset, [train_size, val_size])
 print(len(train_ds), len(val_ds))
 
-batch_size=128
+batch_size=512
 
 train_dl = DataLoader(train_ds, 
                       batch_size, 
@@ -128,3 +128,108 @@ class DeviceDataLoader():
     
 device = get_default_device()
 print(device)
+
+train_dl = DeviceDataLoader(train_dl, device)
+val_dl = DeviceDataLoader(val_dl, device)
+to_device(model, device)
+
+
+# train model
+@torch.no_grad()
+def evaluate(model, val_loader):
+    model.eval()
+    outputs=[]
+    # batch_no=0
+    for  batch in val_loader:
+        outputs.append(model.validation_step(batch))
+        
+    # outputs = [model.validation_step(batch) for batch in val_loader]
+    return model.validation_epoch_end(outputs)
+
+def fit(epochs, lr, model, train_loader, val_loader, opt_func=torch.optim.SGD):
+    history = []
+    optimizer = opt_func(model.parameters(), lr)
+    epoch_num=0
+    for epoch in range(epochs):
+        print("ep num",epoch_num)
+        # Training Phase 
+        model.train()
+        train_losses = []
+        batch_num=0
+        for batch in train_loader:
+            print("batch: " ,batch_num)
+            loss = model.training_step(batch)
+            train_losses.append(loss)
+            loss.backward()
+            optimizer.step()
+            optimizer.zero_grad()
+            batch_num+=1
+            del batch, loss
+        # Validation phase
+        result = evaluate(model, val_loader)
+        result['train_loss'] = torch.stack(train_losses).mean().item()
+        model.epoch_end(epoch, result)
+        history.append(result)
+        print("result: " , result)
+        epoch_num+=1
+    return history
+
+# model = to_device(Cifar10CnnModel(), device)
+# print(evaluate(model, val_dl))
+
+num_epochs = 10
+opt_func = torch.optim.Adam
+lr = 0.001
+
+history = fit(num_epochs, lr, model, train_dl, val_dl, opt_func)
+
+def plot_accuracies(history):
+    accuracies = [x['val_acc'] for x in history]
+    plt.plot(accuracies, '-x')
+    plt.xlabel('epoch')
+    plt.ylabel('accuracy')
+    plt.title('Accuracy vs. No. of epochs')
+    plt.show()
+
+plot_accuracies(history)
+
+def plot_losses(history):
+    train_losses = [x.get('train_loss') for x in history]
+    val_losses = [x['val_loss'] for x in history]
+    plt.plot(train_losses, '-bx')
+    plt.plot(val_losses, '-rx')
+    plt.xlabel('epoch')
+    plt.ylabel('loss')
+    plt.legend(['Training', 'Validation'])
+    plt.title('Loss vs. No. of epochs')
+    plt.show()
+
+plot_losses(history)
+
+# individual img test
+test_dataset = ImageFolder(data_dir+'/test', transform=ToTensor())
+
+def predict_image(img, model):
+    # Convert to a batch of 1
+    xb = to_device(img.unsqueeze(0), device)
+    # Get predictions from model
+    yb = model(xb)
+    # Pick index with highest probability
+    _, preds  = torch.max(yb, dim=1)
+    # Retrieve the class label
+    return dataset.classes[preds[0].item()]
+
+img, label = test_dataset[0]
+plt.imshow(img.permute(1, 2, 0))
+print('Label:', dataset.classes[label], ', Predicted:', predict_image(img, model))
+
+test_loader = DeviceDataLoader(DataLoader(test_dataset, batch_size*2), device)
+result = evaluate(model, test_loader)
+print(result)
+
+torch.save(model.state_dict(), 'cifar10-cnn.pth')
+model2 = to_device(Cifar10CnnModel(), device)
+model2.load_state_dict(torch.load('cifar10-cnn.pth'))
+
+print(evaluate(model2, test_loader))
+
