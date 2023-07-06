@@ -18,8 +18,11 @@ from torchvision.utils import make_grid
 
 import torch.nn as nn
 import torch.nn.functional as F
+import torchvision.models as models
 
 from ImageClassificationBase import ImageClassificationBase
+
+
 
 class Cifar10CnnModel(ImageClassificationBase):
     def __init__(self):
@@ -52,3 +55,51 @@ class Cifar10CnnModel(ImageClassificationBase):
         
     def forward(self, xb):
         return self.network(xb)
+    
+
+def get_model(model_name, num_classes,pretrained = True):
+    if model_name == 'cifar':
+        return Cifar10CnnModel()
+    
+    elif model_name == 'vgg16':
+        if pretrained == True:
+            model = models.vgg16(pretrained=True)
+            # Freeze early layers
+            for param in model.parameters():
+                param.requires_grad = False
+
+        elif pretrained == False:
+            model = models.vgg16(pretrained=False)
+        
+        n_inputs = model.classifier[6].in_features
+
+        # Add on classifier
+        # model.classifier[6] = nn.Sequential(
+        #     nn.Linear(n_inputs, 256), nn.ReLU(), nn.Dropout(0.4),
+        #     nn.Linear(256, num_classes), nn.LogSoftmax(dim=1)
+        #     )
+        model.classifier[6] = nn.Sequential(
+            nn.Linear(n_inputs, 256), nn.ReLU(), nn.Dropout(0.4),
+            nn.Linear(256, num_classes)
+            )
+
+        total_params = sum(p.numel() for p in model.parameters())
+        print(f'{total_params:,} total parameters.')
+        total_trainable_params = sum(
+            p.numel() for p in model.parameters() if p.requires_grad)
+        print(f'{total_trainable_params:,} training parameters.')
+        return model
+
+
+if __name__ == "__main__":
+    m = get_model('vgg16',10)
+    print("--------------------------------------------")
+    print("--------------------------------------------")
+    print("--------------------------------------------")
+    print("--------------------------------------------")
+    
+
+    print(m)
+
+
+
