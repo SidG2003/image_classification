@@ -14,6 +14,7 @@ import torchvision.transforms as transforms
 from ImageClassificationBase import ImageClassificationBase, accuracy
 from model import Cifar10CnnModel, get_model
 import torchvision.models as models
+from vgg16_self import get_vgg
 
 
 def show_batch(dl):
@@ -188,7 +189,8 @@ if __name__ == '__main__':
     val_dl = DeviceDataLoader(val_dl, device)
 
 
-    model = get_model('vgg16', len(classes), pretrained=True)
+    # model = get_model('vgg16', len(classes), pretrained=True)
+    model = get_vgg(pretrained=True,num_classes=5,freeze=True, device=torch.device('cuda'))
     print(model)
     to_device(model, device)
     print(f"accuracy_before_training:{evaluate(model, val_dl)}")
@@ -222,4 +224,5 @@ if __name__ == '__main__':
     model_new = to_device(get_model('vgg16',num_classes=5,pretrained=False), device)
     model_new.load_state_dict(torch.load('vgg16-cnn.pth'))
     print(evaluate(model_new, test_loader))
+
 
